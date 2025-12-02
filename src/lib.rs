@@ -1,5 +1,6 @@
 mod constants;
 mod types;
+mod error;
 
 use std::{fs::{File, OpenOptions}, io::{BufRead, BufReader, BufWriter, Read, Result, Seek, SeekFrom, Write}, path::Path};
 
@@ -50,7 +51,7 @@ pub fn write_page (file: &File, page_id: u32, data: &[u8; PAGE_SIZE as usize]) -
     writer.write_all(data)?;
 
     writer.flush()?;
-    
+
     Ok(())
 }
 
