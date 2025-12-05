@@ -1,5 +1,9 @@
 // use std::error::Error;
 
+use std::fs::File;
+
+use rust_api::write_page;
+
 use crate::constants::{
     PAGE_SIZE,
     DEFAULT_BUFFER_POOL_SIZE
@@ -33,7 +37,9 @@ impl Default for PoolEntry {
 
 impl PoolEntry {
     pub fn cleanup (&mut self) {
-        self.pin_count -= 1;
+        if self.pin_count > 0 {
+            self.pin_count -= 1;
+        } 
     }
 }
 
@@ -50,8 +56,8 @@ impl BufferPool {
         })
     }
 
-    pub fn find_page (page_id: u32, pool: &mut BufferPool) -> PoolPageReuslt<&mut PoolEntry> {
-       let page =  pool.entries.iter_mut().find(|entry| {
+    pub fn find_page (&mut self, page_id: u32) -> PoolPageReuslt<&mut PoolEntry> {
+       let page =  self.entries.iter_mut().find(|entry| {
             if let Some(page_number) = entry.page_id {
                 page_number == page_id
             } else {
@@ -68,10 +74,10 @@ impl BufferPool {
 
     }
 
-    pub fn find_empty_slot (pool: &mut BufferPool) -> PoolResult<(&mut PoolEntry)> {
+    pub fn find_empty_slot (self: &mut BufferPool) -> PoolResult<(&mut PoolEntry)> {
         let mut empty_slot: Option<usize> = None;
         // let mut empty_slot: Option<&mut PoolEntry> = None;
-        for (index, entry) in pool.entries.iter().enumerate()    
+        for (index, entry) in self.entries.iter().enumerate()    
         {
             if let None = entry.page_id {
                 empty_slot = Some(index);
@@ -83,18 +89,18 @@ impl BufferPool {
 
         if let Some(slot) = empty_slot {
             //at this point we are sure we found a free page in the bufferPool
-            pool.entries[slot].pin_count += 1; // increase pin count
-            Ok(&mut pool.entries[slot])
+            self.entries[slot].pin_count += 1; // increase pin count
+            Ok(&mut self.entries[slot])
         } else {
             // this mean we didn't find find an empty Slot in the BufferPool then we need to generate
-            Self::evict_lru(pool)
+            self.evict_lru()
         }
     }
 
-    pub fn evict_lru (pool: &mut BufferPool) -> PoolResult<&mut PoolEntry> {
+    pub fn evict_lru (&mut self) -> PoolResult<&mut PoolEntry> {
         let mut least_last_accessed_value = 0_u64;
         let mut evicted_pool: Option<&mut PoolEntry> = None;
-        for entry in pool.entries.iter_mut()
+        for entry in self.entries.iter_mut()
             .filter(|entry | entry.pin_count == 0) // returns nly pages with Zero pin count i.e being used in the code currently.
         {
             if entry.last_accessed <= least_last_accessed_value {
@@ -110,14 +116,30 @@ impl BufferPool {
             return Err(DbError::PageFull { page_id: 2 })
         }
     }
+
+    pub fn flush_page (&mut self, page_id: u32, file: &File) -> PoolResult<()> {
+        let page = self.find_page(page_id)?;
+        if let Some(page) = page {
+            write_page(file, page_id, &page.data)?;
+            Ok(())
+        } else {
+            //TODO: will use the appropriate error for flush failure
+            Err(DbError::UnterminatedString)
+        }
+    }
 }
 mod pool {
+    use crate::error::DbError;
+
+    // pub fn flush_page (page_id: u32, ) -> Result<(), DbError> {
+
+    //     Ok(())
+    // }
     // pub fn new (size: [PoolEntry; DEFAULT_BUFFER_POOL_SIZE]) -> Result<()> {
     //     Ok(())
     // }
-    pub fn get_page () {}
-    pub fn pin_page () {}
-    pub fn unpin_page () {}
-    pub fn flush_page () {}
-    pub fn flush_all () {}
+    // pub fn get_page () {}
+    // pub fn pin_page () {}
+    // pub fn unpin_page () {}
+    // pub fn flush_all () {}
 }
