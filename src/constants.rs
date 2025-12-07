@@ -11,4 +11,7 @@ pub const COLUMNS_CATALOG_PAGE: u8 = 2;
 pub const FIRST_DATA_PAGE: u32 = 3;
 pub const MAX_STRING_LENGTH: u16 = 65535;
 pub const DEFAULT_BUFFER_POOL_SIZE: usize = 64;
+pub const BITS_PER_BYTE: usize = 8;
+pub const BIT_DISCRIMINATOR: usize = 7;
+pub const STRING_LENGTH_SIZE: usize = 2;
 

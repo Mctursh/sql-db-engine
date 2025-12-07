@@ -3,6 +3,7 @@ mod constants;
 mod types;
 mod buffer;
 mod error;
+mod record;
 
 use axum::{
     routing::get,
