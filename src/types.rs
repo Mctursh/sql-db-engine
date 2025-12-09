@@ -60,7 +60,7 @@ pub struct Column {
     table_id: u32,
     column_id: u32,
     name: String,
-    data_type: DataType,
+    pub data_type: DataType,
     nullable: bool,
     position: u8,
     is_primary: bool,

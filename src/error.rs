@@ -1,4 +1,4 @@
-use std::io::Error;
+use std::{io::Error, string::FromUtf8Error};
 
 #[derive(Debug)]
 pub enum DbError {
@@ -17,7 +17,8 @@ pub enum DbError {
 
     PageFull { page_id: u32 },
     CorruptPage { page_id: u32 },
-    Io(Error)
+    Io(Error),
+    strconv(FromUtf8Error)
     // SYNTAX_UNEXPECTED_TOKEN,
     // SYNTAX_UNTERMINATED_STRING,
     // SYNTAX_INVALID_NUMBER,
@@ -37,5 +38,11 @@ pub enum DbError {
 impl From<Error> for DbError {
     fn from (err: Error) -> Self {
         DbError::Io(err)
+    }
+}
+
+impl From<FromUtf8Error> for DbError {
+    fn from (err: FromUtf8Error) -> Self {
+        DbError::strconv(err)
     }
 }
