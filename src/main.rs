@@ -34,8 +34,8 @@ async fn main() -> Result<(), Error> {
     let page_2_bytes = read_page(&file, 2)?;
 
 
-    let table_header = PageHeader::from_bytes(page_1_bytes);
-    let column_header = PageHeader::from_bytes(page_2_bytes);
+    let table_header = PageHeader::from_bytes(&page_1_bytes);
+    let column_header = PageHeader::from_bytes(&page_2_bytes);
 
     print!("Table header is: {:#?}", table_header);
     print!("Table column is: {:#?}", column_header);

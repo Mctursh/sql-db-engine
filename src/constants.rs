@@ -14,4 +14,5 @@ pub const DEFAULT_BUFFER_POOL_SIZE: usize = 64;
 pub const BITS_PER_BYTE: usize = 8;
 pub const BIT_DISCRIMINATOR: usize = 7;
 pub const STRING_LENGTH_SIZE: usize = 2;
+pub const SLOT_BYTE_SIZE: u32 = 4;
 

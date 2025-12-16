@@ -1,7 +1,7 @@
 
 
 pub mod encoder {
-    use crate::{constants::{BIT_DISCRIMINATOR, BITS_PER_BYTE, STRING_LENGTH_SIZE}, error::DbError, types::{Column, DataType, DataTypeValue}};
+    use crate::{constants::{BIT_DISCRIMINATOR, BITS_PER_BYTE, PAGE_HEADER_SIZE, PAGE_SIZE, SLOT_BYTE_SIZE, STRING_LENGTH_SIZE}, error::DbError, types::{Column, DataType, DataTypeValue, PageHeader, Slot}};
 
     type EncoderResult<T> = Result<T, DbError>;
 
@@ -160,4 +160,57 @@ pub mod encoder {
         let bit_index = index % BITS_PER_BYTE; // gives use  the remaining bits to the end of the byte
         bitmap[byte_index] >> bit_index & 1 == 1
     }
+
+    pub fn get_slot (page_bytes: &[u8; PAGE_SIZE as usize], slot_index: u32) -> EncoderResult<Slot> {
+        let slot_offset = (PAGE_SIZE * ((slot_index + 1) * SLOT_BYTE_SIZE));
+        // TODO: validtaion needed here that page data doesn't get to the offset 
+        let slot_bytes: [u8; SLOT_BYTE_SIZE as usize] = [
+            page_bytes[slot_offset as usize],
+            page_bytes[(slot_offset + 1) as usize],
+            page_bytes[(slot_offset + 2) as usize],
+            page_bytes[(slot_offset + 3) as usize],
+        ];
+        Ok(Slot::from_bytes(slot_bytes))
+    }
+    
+    pub fn read_slot (page_bytes: &[u8; PAGE_SIZE as usize], slot: Slot) -> EncoderResult<Vec<u8>> {
+        let mut slot_data: Vec<u8> = Vec::new();
+        let Slot { length, offset } = slot;
+        
+        for i in 0..length {
+            slot_data.push(page_bytes[(offset + i) as usize]);
+        }
+        
+        Ok(slot_data)
+
+    }
+
+    pub fn set_slot (page_bytes: &mut [u8; PAGE_SIZE as usize], slot_index: u32, offset: u16, length: u16) -> EncoderResult<&mut [u8; PAGE_SIZE as usize]> {
+        let slot_offset = (PAGE_SIZE * ((slot_index + 1) * SLOT_BYTE_SIZE)) as usize;
+        // TODO: validtaion needed here that page data doesn't get to the offset 
+        let slot_bytes = Slot::to_bytes(length, offset);
+        page_bytes[slot_offset] = slot_bytes[0];
+        page_bytes[slot_offset + 1] = slot_bytes[1];
+        page_bytes[slot_offset + 2] = slot_bytes[2];
+        page_bytes[slot_offset + 3] = slot_bytes[3];
+
+        Ok(page_bytes)
+    }
+
+    pub fn calculate_free_space (page_bytes: &[u8; PAGE_SIZE as usize]) -> EncoderResult<u32> {
+        let page_header = PageHeader::from_bytes(&page_bytes);
+        let free_space_offset = page_header.free_space_offset as u32;
+        let record_count = page_header.record_count as u32;
+        let slot_directory_start = PAGE_SIZE - record_count * SLOT_BYTE_SIZE;
+        Ok(slot_directory_start - free_space_offset)
+    }
+
+    pub fn can_fit_record (page_bytes: &[u8; PAGE_SIZE as usize], record_size: u32) -> EncoderResult<bool> {
+        Ok(calculate_free_space(page_bytes)? > record_size)
+        // Ok(false)
+    }
+
+    pub fn insert_record () {}
+    pub fn read_record () {}
+    pub fn delete_record () {}
 }

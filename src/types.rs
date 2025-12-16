@@ -3,7 +3,7 @@ use std::error::Error;
 use std::fmt::{Display, Formatter};
 
 use crate::constants::{
-    COLUMNS_CATALOG_PAGE, FILE_FORMAT_VERSION, FIRST_DATA_PAGE, MAGIC_NUMBER, NULL_PAGE, PAGE_SIZE, TABLES_CATALOG_PAGE, PAGE_HEADER_SIZE
+    COLUMNS_CATALOG_PAGE, FILE_FORMAT_VERSION, FIRST_DATA_PAGE, MAGIC_NUMBER, NULL_PAGE, PAGE_HEADER_SIZE, PAGE_SIZE, SLOT_BYTE_SIZE, TABLES_CATALOG_PAGE
 };
 
 #[derive(Clone, Copy, Debug)]
@@ -143,8 +143,8 @@ impl FileHeader {
 #[derive(Debug)]
 pub struct PageHeader {
     page_type: PageType,
-    record_count: u16,
-    free_space_offset: u16,
+    pub record_count: u16, // amount of slots in the page(normal and tombstone slots)
+    pub free_space_offset: u16, // The byte offset where the last record on the page ends
     next_page: u32,
     table_id: u32
 }
@@ -187,7 +187,7 @@ impl PageHeader {
         bytes
     }
 
-    pub fn from_bytes (data: [u8; PAGE_SIZE as usize]) -> Self {
+    pub fn from_bytes (data: &[u8; PAGE_SIZE as usize]) -> Self {
         Self {
             page_type: match data[0] {
                 0 => PageType::Free,
@@ -200,11 +200,38 @@ impl PageHeader {
             table_id: u32::from_le_bytes([data[9], data[10], data[11], data[12]])
         }
     }
+
+    pub fn calculate_free_space_offset (&self) {
+
+    }
 }
 
 
 pub struct Slot {
-
+    pub offset: u16,
+    pub length: u16,
 }
+
+impl Slot {
+    
+    pub fn from_bytes (bytes: [u8; SLOT_BYTE_SIZE as usize]) -> Self {
+        Self {
+            offset: u16::from_le_bytes([bytes[0], bytes[1]]),
+            length: u16::from_le_bytes([bytes[2], bytes[3]])
+        }
+    }
+
+    pub fn to_bytes(length: u16, offset: u16) -> [u8; SLOT_BYTE_SIZE as usize] {
+        let mut bytes = [0u8; SLOT_BYTE_SIZE as usize];
+        bytes[0..2].copy_from_slice(&offset.to_le_bytes());
+        bytes[2..4].copy_from_slice(&length.to_le_bytes());
+
+        bytes
+    }
+    //     bytes[0..2].copy_from_slice(u16::from_le_bytes([data[3], data[4]]));
+    // }
+}
+
+
 
 
