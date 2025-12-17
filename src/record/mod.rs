@@ -161,6 +161,10 @@ pub mod encoder {
         bitmap[byte_index] >> bit_index & 1 == 1
     }
 
+    fn get_page_free_slot_offset (page_bytes: &[u8; PAGE_SIZE as usize], record_count: u32) -> u32 {
+        PAGE_SIZE - ((record_count + 1) * SLOT_BYTE_SIZE)
+    }
+
     pub fn get_slot (page_bytes: &[u8; PAGE_SIZE as usize], slot_index: u32) -> EncoderResult<Slot> {
         let slot_offset = (PAGE_SIZE * ((slot_index + 1) * SLOT_BYTE_SIZE));
         // TODO: validtaion needed here that page data doesn't get to the offset 
@@ -205,12 +209,47 @@ pub mod encoder {
         Ok(slot_directory_start - free_space_offset)
     }
 
-    pub fn can_fit_record (page_bytes: &[u8; PAGE_SIZE as usize], record_size: u32) -> EncoderResult<bool> {
-        Ok(calculate_free_space(page_bytes)? > record_size)
+    pub fn can_fit_record (page_bytes: &[u8; PAGE_SIZE as usize], record_size: usize) -> EncoderResult<bool> {
+        Ok((calculate_free_space(page_bytes)? as usize) > record_size)
         // Ok(false)
     }
 
-    pub fn insert_record () {}
-    pub fn read_record () {}
+    pub fn insert_record (page_bytes: &mut [u8; PAGE_SIZE as usize], record_bytes: &[u8]) -> EncoderResult<(u32)> {
+        let mut page_header = PageHeader::from_bytes(page_bytes);
+        let free_space_offset = page_header.free_space_offset as usize;
+        let record_count = page_header.record_count as u32;
+
+        let space_needed_for_entry = record_bytes.len() + (SLOT_BYTE_SIZE as usize);
+
+        if !can_fit_record(&page_bytes, space_needed_for_entry)? {
+            // TODO use appropriate error eg PageFull error
+            return Err(DbError::UnterminatedString)
+        }
+
+        let new_slot_offset = get_page_free_slot_offset(&page_bytes, record_count) as usize;
+
+        let slot_bytes = Slot::to_bytes((record_bytes.len() as u16), (free_space_offset as u16));
+
+        // write record bytes
+        page_bytes[free_space_offset..(free_space_offset + record_bytes.len())]
+        .copy_from_slice(&record_bytes);
+    
+        // write slot bytes
+        page_bytes[new_slot_offset..(new_slot_offset + (SLOT_BYTE_SIZE as usize))]
+            .copy_from_slice(&slot_bytes);
+
+        page_header.record_count += 1;
+        page_header.free_space_offset = (free_space_offset + record_bytes.len()) as u16;
+
+        page_bytes[0..PAGE_HEADER_SIZE].copy_from_slice(&page_header.to_header_bytes());
+
+        //new slot index is the old record count.
+        Ok(record_count)
+    }
+
+    pub fn read_record (page_bytes: &[u8; PAGE_SIZE as usize], slot_index: u32) {
+
+    }
+    
     pub fn delete_record () {}
 }

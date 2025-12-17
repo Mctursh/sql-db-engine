@@ -187,6 +187,17 @@ impl PageHeader {
         bytes
     }
 
+    pub fn to_header_bytes (&self) -> [u8; PAGE_HEADER_SIZE as usize] {
+        let mut bytes = [0u8; PAGE_HEADER_SIZE as usize];
+        bytes[0] = self.page_type as u8;
+        bytes[1..3].copy_from_slice(&self.record_count.to_le_bytes());
+        bytes[3..5].copy_from_slice(&self.free_space_offset.to_le_bytes());
+        bytes[5..9].copy_from_slice(&self.next_page.to_le_bytes());
+        bytes[9..13].copy_from_slice(&self.table_id.to_le_bytes());
+
+        bytes
+    }
+
     pub fn from_bytes (data: &[u8; PAGE_SIZE as usize]) -> Self {
         Self {
             page_type: match data[0] {
