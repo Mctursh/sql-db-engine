@@ -165,7 +165,7 @@ pub mod encoder {
         PAGE_SIZE - ((record_count + 1) * SLOT_BYTE_SIZE)
     }
 
-    pub fn get_slot (page_bytes: &[u8; PAGE_SIZE as usize], slot_index: u32) -> EncoderResult<Slot> {
+    pub fn get_slot (page_bytes: &[u8; PAGE_SIZE as usize], slot_index: &u32) -> EncoderResult<Slot> {
         let slot_offset = (PAGE_SIZE * ((slot_index + 1) * SLOT_BYTE_SIZE));
         // TODO: validtaion needed here that page data doesn't get to the offset 
         let slot_bytes: [u8; SLOT_BYTE_SIZE as usize] = [
@@ -177,15 +177,15 @@ pub mod encoder {
         Ok(Slot::from_bytes(slot_bytes))
     }
     
-    pub fn read_slot (page_bytes: &[u8; PAGE_SIZE as usize], slot: Slot) -> EncoderResult<Vec<u8>> {
-        let mut slot_data: Vec<u8> = Vec::new();
+    pub fn read_slot (page_bytes: &[u8; PAGE_SIZE as usize], slot: Slot) -> EncoderResult<&[u8]> {
         let Slot { length, offset } = slot;
+        // for i in 0..length {
+        //     slot_data.push(page_bytes[(offset + i) as usize]);
+        // }
+
+        Ok(&page_bytes[(offset as usize)..((offset + length) as usize)])
         
-        for i in 0..length {
-            slot_data.push(page_bytes[(offset + i) as usize]);
-        }
-        
-        Ok(slot_data)
+        // Ok(slot_data)
 
     }
 
@@ -247,9 +247,36 @@ pub mod encoder {
         Ok(record_count)
     }
 
-    pub fn read_record (page_bytes: &[u8; PAGE_SIZE as usize], slot_index: u32) {
+    pub fn read_record (page_bytes: &[u8; PAGE_SIZE as usize], slot_index: u32) -> EncoderResult<&[u8]> {
+        let page_header = PageHeader::from_bytes(page_bytes);
+        // let free_space_offset = page_header.free_space_offset as usize;
+        let record_count = page_header.record_count as u32;
 
+        if slot_index >= record_count {
+            // Todo: need to use appropriate overflow error
+            return Err(DbError::UnterminatedString)
+        }
+        
+        let slot = get_slot(&page_bytes, &slot_index)?;
+        
+        if slot.offset == 0 { // means record deleted
+            // Todo use appropraite error for deleted record.
+            return Err(DbError::UnterminatedString)
+        }
+
+        Ok(&read_slot(&page_bytes, slot)?)
+
+        // Ok(())
     }
     
-    pub fn delete_record () {}
+    pub fn delete_record (page_bytes: &[u8; PAGE_SIZE as usize], slot_index: u32) -> EncoderResult<()> {
+        let slot = get_slot(page_bytes, &slot_index)?;
+        if slot.offset == 0 { // deleted slot (Tombstone)
+            //Todo: hamdle proper error variant for deleting an already deleted record.
+            return Err(DbError::UnterminatedString)
+        }
+        Ok(())
+    }
+
+    pub fn iterate_records(page_bytes: &[u8; PAGE_SIZE as usize]) {}
 }
