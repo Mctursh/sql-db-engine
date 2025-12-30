@@ -1,11 +1,15 @@
 
+pub mod Encoder {
+    use std::iter::zip;
 
-pub mod encoder {
-    use crate::{constants::{BIT_DISCRIMINATOR, BITS_PER_BYTE, PAGE_HEADER_SIZE, PAGE_SIZE, SLOT_BYTE_SIZE, STRING_LENGTH_SIZE}, error::DbError, types::{Column, DataType, DataTypeValue, PageHeader, Slot}};
+    use crate::constants::{BIT_DISCRIMINATOR, BITS_PER_BYTE, PAGE_HEADER_SIZE, PAGE_SIZE, SLOT_BYTE_SIZE, STRING_LENGTH_SIZE};
+    use crate::error::DbError;
+    use crate::types::{Column, DataType, DataTypeValue, PageHeader, Slot};
 
     type EncoderResult<T> = Result<T, DbError>;
 
-    pub fn encoder (columns: Vec<Column>, values: Vec<DataTypeValue>) -> EncoderResult<Vec<u8>> {
+    // pub fn encode_record (columns: &Vec<DataType>, values: &Vec<DataTypeValue>) -> EncoderResult<Vec<u8>> {
+    pub fn encode_record (columns: &Vec<Column>, values: &Vec<DataTypeValue>) -> EncoderResult<Vec<u8>> {
         if columns.len() != values.len() {
             // TODO; use appropriate error
             return Err(DbError::UnterminatedString)
@@ -14,8 +18,18 @@ pub mod encoder {
         //TODO: add validation for encoding
         let mut encoded_bytes = get_bitmap(&values)?;
 
-        for index in 0..values.len() {
-            match &values[index] {
+        for (column, value) in zip(columns, values) {
+        // for index in 0..values.len() {
+
+            //check if not nullable value receives null
+            if let DataTypeValue::Null = value {
+                if !column.nullable {
+                    // Todo: Use prooper Error for non-null violation
+                    return Err(DbError::UnterminatedString)
+                }
+            }
+
+            match &value {
                 DataTypeValue::UInt32(v) => {
                     encoded_bytes.extend_from_slice(&v.to_le_bytes());
                 },
@@ -36,10 +50,23 @@ pub mod encoder {
                     }
                 },
                 DataTypeValue::String(v) => {
+                    //check string length constraint
+                    if let Some(len) = column.max_length {
+                        if v.len() > (len as usize) {
+                            // Todo: Use proper Error for string overflow error
+                            return Err(DbError::UnterminatedString)
+                        }
+                    }
+
                     let string_length_byte: [u8; STRING_LENGTH_SIZE] = (v.len() as u16).to_le_bytes();
+                    let string_len = v.len();
+                    println!("string length is {string_len}");
+                    println!("string is {v}");
+                    println!("string length byte is {string_length_byte:?}");
                     let str_bytes = v.as_bytes();
                     encoded_bytes.extend_from_slice(&string_length_byte);
                     encoded_bytes.extend_from_slice(&str_bytes);
+                    println!("string byte is {str_bytes:?}");
                 },
                 _ => {}
             }
@@ -48,10 +75,13 @@ pub mod encoder {
         Ok(encoded_bytes)
     }
 
-    pub fn decoder_record (columns: Vec<Column>, bytes: &[u8]) -> EncoderResult<Vec<DataTypeValue>> {
+    // pub fn decode_record (columns: Vec<DataType>, bytes: &[u8]) -> EncoderResult<Vec<DataTypeValue>> {
+    pub fn decode_record (columns: Vec<Column>, bytes: &[u8]) -> EncoderResult<Vec<DataTypeValue>> {
         let null_bitmap_size = (columns.len() + BIT_DISCRIMINATOR) / BITS_PER_BYTE;
         let null_bitmap = &bytes[0..null_bitmap_size];
-        let mut pointer_index = 0usize;
+        let mut pointer_index = 0 + null_bitmap_size;
+
+        println!("The bytes are {bytes:?}");
 
         let values: Result<Vec<DataTypeValue>, DbError> = columns.iter().enumerate().map(|(index, column)| {
             if is_null(null_bitmap, &index) {
@@ -59,6 +89,7 @@ pub mod encoder {
                 // values.push(&DataTypeValue::Null);
             } else {
                 match column.data_type {
+                // match column.data_type {
                     DataType::Bool => {
                         if bytes[pointer_index] == 1 {
                             // values.push(&DataTypeValue::Bool(true));
@@ -126,8 +157,19 @@ pub mod encoder {
                         Ok(DataTypeValue::UInt64(i32_val))
                     },
                     DataType::String => {
+                        let str_len = [bytes[pointer_index + 1], bytes[pointer_index + 2]];
+                        // let str_len = [bytes[pointer_index], bytes[pointer_index + 1]];
+                        println!("str_len length is {str_len:?}");
+                        println!("Pointer index is {pointer_index:?}");
+
+
                         let string_len = u16::from_le_bytes([bytes[pointer_index], bytes[pointer_index + 1]]);
-                        let string_byte = &bytes[(pointer_index + 2)..(pointer_index + string_len as usize)];
+                        let end_index = pointer_index + string_len as usize;
+                        let byte_len = bytes.len();
+                        println!("Bytes length is {byte_len}");
+                        println!("String length is {string_len}");
+                        println!("End index length is {end_index}");
+                        let string_byte = &bytes[(pointer_index + STRING_LENGTH_SIZE)..(pointer_index + STRING_LENGTH_SIZE + string_len as usize)];
                         pointer_index += (2 + string_len) as usize;
                         Ok(DataTypeValue::String(String::from_utf8(string_byte.to_vec())?))
                     },
@@ -141,6 +183,9 @@ pub mod encoder {
     fn get_bitmap (values: &Vec<DataTypeValue>) -> EncoderResult<Vec<u8>> {
         let bitmap_size  = (values.len() + BIT_DISCRIMINATOR) / BITS_PER_BYTE;
         let mut null_bit_map: Vec<u8> = vec![0u8; bitmap_size];
+
+        println!("bitmap size {bitmap_size:?}");
+        println!("Generated bitmap {null_bit_map:?}");
 
         for (index, value) in values.iter().enumerate() {
             match value {
@@ -156,8 +201,13 @@ pub mod encoder {
     }
     
     fn is_null (bitmap: &[u8], index: &usize) -> bool {
-        let byte_index  = (bitmap.len() + BIT_DISCRIMINATOR) / BITS_PER_BYTE;
+        let byte_index  = ((bitmap.len() + BIT_DISCRIMINATOR) / BITS_PER_BYTE) - 1;
         let bit_index = index % BITS_PER_BYTE; // gives use  the remaining bits to the end of the byte
+
+        println!("Byte Index {byte_index:?}");
+        println!("Bitmap {bitmap:?}");
+        println!("Bit index {bit_index:?}");
+        // bitmap[byte_index - 1] >> bit_index & 1 == 1
         bitmap[byte_index] >> bit_index & 1 == 1
     }
 
@@ -166,7 +216,8 @@ pub mod encoder {
     }
 
     pub fn get_slot (page_bytes: &[u8; PAGE_SIZE as usize], slot_index: &u32) -> EncoderResult<Slot> {
-        let slot_offset = (PAGE_SIZE * ((slot_index + 1) * SLOT_BYTE_SIZE));
+        let slot_offset = (PAGE_SIZE - ((slot_index + 1) * SLOT_BYTE_SIZE));
+        // let slot_offset = (PAGE_SIZE * ((slot_index + 1) * SLOT_BYTE_SIZE));
         // TODO: validtaion needed here that page data doesn't get to the offset 
         let slot_bytes: [u8; SLOT_BYTE_SIZE as usize] = [
             page_bytes[slot_offset as usize],
@@ -258,9 +309,12 @@ pub mod encoder {
         }
         
         let slot = get_slot(&page_bytes, &slot_index)?;
+
+        println!("slot data is {slot:?}");
         
         if slot.offset == 0 { // means record deleted
             // Todo use appropraite error for deleted record.
+            println!("Failed here");
             return Err(DbError::UnterminatedString)
         }
 
@@ -269,12 +323,22 @@ pub mod encoder {
         // Ok(())
     }
     
-    pub fn delete_record (page_bytes: &[u8; PAGE_SIZE as usize], slot_index: u32) -> EncoderResult<()> {
-        let slot = get_slot(page_bytes, &slot_index)?;
+    pub fn delete_record (page_bytes: &mut [u8; PAGE_SIZE as usize], slot_index: u32) -> EncoderResult<()> {
+        let mut page_header = PageHeader::from_bytes(page_bytes);
+        let mut slot = get_slot(page_bytes, &slot_index)?;
         if slot.offset == 0 { // deleted slot (Tombstone)
             //Todo: hamdle proper error variant for deleting an already deleted record.
             return Err(DbError::UnterminatedString)
         }
+        slot.offset = 0;
+        let new_slot_offset = get_page_free_slot_offset(&page_bytes, slot_index) as usize;
+        // let new_slot_offset = get_page_free_slot_offset(&page_bytes, page_header.record_count as u32) as usize;
+        let slot_bytes = Slot::to_bytes(slot.length, slot.offset);
+
+         // write slot bytes
+         page_bytes[new_slot_offset..(new_slot_offset + (SLOT_BYTE_SIZE as usize))]
+            .copy_from_slice(&slot_bytes);
+
         Ok(())
     }
 

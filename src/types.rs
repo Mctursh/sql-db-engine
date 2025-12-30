@@ -20,6 +20,7 @@ pub enum PageType {
     // Overflow = 5,
 
 }
+#[derive(Debug)]
 #[repr(u8)]
 pub enum DataType {
     UInt32 = 1,
@@ -30,6 +31,7 @@ pub enum DataType {
     String = 6
 }
 
+#[derive(Debug)]
 pub enum DataTypeValue {
     Null,
     UInt32(u32),
@@ -60,14 +62,14 @@ impl Table {
 }
 
 pub struct Column {
-    table_id: u32,
-    column_id: u32,
-    name: String,
+    pub table_id: u32,
+    pub column_id: u32,
+    pub name: String,
     pub data_type: DataType,
-    nullable: bool,
-    position: u8,
-    is_primary: bool,
-    max_length: Option<u16>
+    pub nullable: bool,
+    pub position: u8,
+    pub is_primary: bool,
+    pub max_length: Option<u16>
 }
 
 #[derive(Debug)]
@@ -220,7 +222,11 @@ impl PageHeader {
     }
 }
 
+pub struct Page {
 
+}
+
+#[derive(Debug)]
 pub struct Slot {
     pub offset: u16,
     pub length: u16,
